@@ -1,12 +1,14 @@
 name: android-apk-release
 
-# Build a signed release APK of the MnnLlmChat Android app and publish it as a
-# GitHub Release asset (on version tags) and as a workflow artifact (always).
+# Build a signed release APK of the MnnLlmChat Android app on MANUAL trigger only.
+# No automatic trigger (push/tag/schedule) — run it from the Actions tab.
 on:
-  push:
-    tags:
-      - 'v*'            # e.g. v0.8.3 -> build & publish a release APK
   workflow_dispatch:    # manual "Run workflow" from the Actions tab
+    inputs:
+      publish_release:
+        description: 'Also publish the APK to a GitHub Release (only when run on a tag/branch with a release)'
+        type: boolean
+        default: false
 
 concurrency:
   group: android-apk-release-${{ github.ref }}
@@ -115,7 +117,7 @@ jobs:
             -DMNN_QNN=OFF \
             -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON \
             -DCMAKE_SHARED_LINKER_FLAGS='-Wl,-z,max-page-size=16384'"
-          make install
+          make -j"$(nproc)"
 
       - name: Build release APK
         working-directory: apps/Android/MnnLlmChat
@@ -139,7 +141,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: ${{ github.event.inputs.publish_release == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.apk.outputs.apk }}
