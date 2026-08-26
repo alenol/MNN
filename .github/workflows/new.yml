@@ -46,38 +46,48 @@ jobs:
         uses: actions/checkout@v4
 
       # ----------------------------------------------------------------------
-      # Apply the patch bundle committed at the repo root.
-      # The bundle is split into parts mnn1.zip, mnn2.zip, ... (each < 25 MB)
-      # so it can be uploaded from a phone. If the split parts are present we
-      # concatenate them back into mnn.zip first; a single mnn.zip is also
-      # accepted for backward compatibility. The zip carries MNN-repo-relative
-      # paths (source patches AND this workflow). Extract it over the checkout
-      # to overlay the modifications, then build. If neither is present, build
-      # the vanilla sources.
+      # Apply the patch bundle committed at the repo root (overlay over the
+      # checkout, then build). The bundle is looked up in this priority:
+      #   1. mnn-2.zip  — single pre-merged bundle (recommended upload).
+      #   2. mnn.zip    — single bundle (backward compatible).
+      #   3. mnn1.zip, mnn2.zip, ... — split parts reassembled into mnn.zip.
+      # The zip carries MNN-repo-relative paths (source patches AND this
+      # workflow). If none is present, build the vanilla sources.
       # ----------------------------------------------------------------------
-      - name: Reassemble and apply mnn patch bundle (if present)
+      - name: Apply mnn patch bundle (if present)
         run: |
           set -e
-          ZIP="mnn.zip"
-          # Collect split parts mnn1.zip, mnn2.zip, ... in numeric order.
-          PARTS=()
-          for f in $(ls mnn[0-9]*.zip 2>/dev/null | sort -t n -k 1.4 -n); do
-            PARTS+=("$f")
-          done
-          if [ "${#PARTS[@]}" -gt 0 ]; then
-            echo "::notice::Found ${#PARTS[@]} split part(s): ${PARTS[*]} — reassembling into $ZIP."
-            rm -f "$ZIP"
-            cat "${PARTS[@]}" > "$ZIP"
-            echo "::notice::Reassembled $ZIP ($(wc -c < "$ZIP") bytes)."
+          ZIP=""
+          # 1) Prefer the single pre-merged bundle.
+          if [ -f "mnn-2.zip" ]; then
+            ZIP="mnn-2.zip"
+            echo "::notice::Found mnn-2.zip ($ZIP) — using it directly."
+          # 2) Fall back to a single mnn.zip.
+          elif [ -f "mnn.zip" ]; then
+            ZIP="mnn.zip"
+            echo "::notice::Found mnn.zip — using it directly."
+          # 3) Otherwise try to reassemble split parts.
+          else
+            PARTS=()
+            for f in $(ls mnn[0-9]*.zip 2>/dev/null | sort -t n -k 1.4 -n); do
+              PARTS+=("$f")
+            done
+            if [ "${#PARTS[@]}" -gt 0 ]; then
+              echo "::notice::Found ${#PARTS[@]} split part(s): ${PARTS[*]} — reassembling into mnn.zip."
+              rm -f mnn.zip
+              cat "${PARTS[@]}" > mnn.zip
+              ZIP="mnn.zip"
+              echo "::notice::Reassembled mnn.zip ($(wc -c < "$ZIP") bytes)."
+            fi
           fi
-          if [ -f "$ZIP" ]; then
-            echo "::notice::Found $ZIP — extracting over the repository (overlay)."
+          if [ -n "$ZIP" ]; then
+            echo "::notice::Extracting $ZIP over the repository (overlay)."
             command -v unzip >/dev/null 2>&1 || (sudo apt-get update -qq && sudo apt-get install -y -qq unzip)
             unzip -o "$ZIP" -d .
             echo "::notice::Patch applied. Overwritten files:"
             unzip -l "$ZIP" | awk 'NR>3 && $4!="" {print "  - "$4}'
           else
-            echo "::notice::No mnn.zip / mnnN.zip parts found at repo root — building with committed sources."
+            echo "::notice::No mnn bundle found at repo root — building with committed sources."
           fi
 
       - name: Set up JDK 17
