@@ -85,6 +85,8 @@ jobs:
             command -v unzip >/dev/null 2>&1 || (sudo apt-get update -qq && sudo apt-get install -y -qq unzip)
             unzip -o "$ZIP" -d .
             echo "::notice::Patch applied. Overwritten files:"
+            echo "::debug::[DIAG] DocumentImporter.kt first 12 lines after unzip:"
+            sed -n '1,12p' "apps/Android/MnnLlmChat/app/src/main/java/com/alibaba/mnnllm/android/chat/DocumentImporter.kt" 2>/dev/null || echo "::debug::[DIAG] file NOT FOUND after unzip"
             unzip -l "$ZIP" | awk 'NR>3 && $4!="" {print "  - "$4}'
           else
             echo "::notice::No mnn bundle found at repo root — building with committed sources."
